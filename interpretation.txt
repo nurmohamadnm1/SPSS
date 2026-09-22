@@ -1,0 +1,101 @@
+# Problem 01 (GSE113513 – Colorectal Carcinoma) — পূর্ণাঙ্গ Interpretation
+
+নিচে প্রতিটি অংশের (a) থেকে (j) পর্যন্ত ব্যাখ্যা দিলাম — **কেন করলাম** এবং **কী পাচ্ছি (ফলাফলের অর্থ)** সহ।
+
+---
+
+## (a) Dataset Retrieval — কেন করলাম?
+NCBI GEO থেকে GSE113513 ডেটাসেটটি খুঁজে বের করার উদ্দেশ্য হলো, কোনো একটি নির্দিষ্ট gene expression study-এর **experimental design এবং metadata** যাচাই করা, যাতে downstream analysis (DEG, network, pathway ইত্যাদি) করার আগে বুঝা যায়:
+- কোন disease-এ কাজ করছি (Colorectal Carcinoma)
+- কোন organism (Homo sapiens)
+- কী ধরনের platform/technology ব্যবহার হয়েছে (Affymetrix microarray, GPL15207)
+- Sample size ও case-control ratio (14 vs 14, moderate sized cohort)
+
+**কী পাচ্ছি:** এটি একটি well-annotated, published (PubMed ID 35096810) microarray dataset, যেখানে 28টি paired tumor-normal sample আছে — অর্থাৎ একই রোগীর cancerous ও adjacent non-cancerous টিস্যু তুলনা করা হয়েছে, যা statistical power বাড়ায় (paired design, batch effect কম)।
+
+---
+
+## (b) LIMMA (via GEO2R) — Differential Expression Analysis
+**কেন:** Case (disease) বনাম control (healthy) গ্রুপে কোন জিনগুলোর expression পরিসংখ্যানগতভাবে উল্লেখযোগ্যভাবে ভিন্ন, তা বের করতে LIMMA (Linear Models for Microarray Data) ব্যবহার করা হয়। এটি empirical Bayes moderated t-statistic ব্যবহার করে, যা ছোট sample size-এও stable variance estimate দেয়।
+
+**Volcano plot-এর অর্থ:** 
+- X-axis = log2(fold change) → কতটা বেশি/কম expressed
+- Y-axis = -log10(P-value) → পরিসংখ্যানগত তাৎপর্য
+- লাল বিন্দু (up) ও নীল বিন্দু (down) স্পষ্টভাবে আলাদা হওয়া মানে dataset-এ একটি strong, biologically meaningful signal আছে — অর্থাৎ tumor vs normal-এর মধ্যে transcriptomic পার্থক্য বেশ বড়।
+
+---
+
+## (c) DEG Identification (cutoff: adj.P<0.05, |log2FC|>2)
+**কেন:** শুধু statistically significant না, বরং **biologically substantial** পরিবর্তনও দরকার — তাই fold-change cutoff (|log2FC|>2, অর্থাৎ ≥4 গুণ পরিবর্তন) যোগ করা হয়েছে যাতে noise বাদ দিয়ে শক্তিশালী DEG পাওয়া যায়।
+
+**কী পাচ্ছি:**
+- **Downregulated** জিনগুলোর মধ্যে MMP7, FOXQ1, CLDN1, CDH3, CXCL8 ইত্যাদি প্রাধান্য পাচ্ছে — এদের অনেকগুলো epithelial integrity/junction-related (claudin, cadherin) — colorectal cancer-এ epithelial-mesenchymal transition (EMT)-এর সাথে সম্পর্কিত।
+- **Upregulated** জিনে CA1, CA2 (carbonic anhydrase), GCG, GUCA2A/B, AQP8 প্রাধান্য — এগুলো মূলত normal colon secretory/absorptive function সম্পর্কিত জিন, যেগুলো tumor-এ **downregulated হওয়ার কথা**, কিন্তু এখানে upregulated দেখাচ্ছে অর্থাৎ "healthy vs disease" তুলনায় direction convention খেয়াল রাখতে হবে (healthy-তে বেশি হলে সেটিকে "up in healthy" ধরা যায়)।
+
+---
+
+## (d) PPI Network (Degree + Betweenness)
+**কেন:** শুধু expression বেশি হলেই একটি জিন functionally গুরুত্বপূর্ণ নয় — network-এ সেই জিন **কতজনের সাথে interact করে (Degree)** এবং **কতটা information flow control করে (Betweenness)** সেটা দিয়ে "hub gene" বা key gene (KG) নির্ধারণ করা হয়।
+
+**কী পাচ্ছি:** CXCL8 (degree=9, highest combined rank) সবচেয়ে গুরুত্বপূর্ণ hub — এটি একটি inflammatory chemokine, যা tumor microenvironment-এ immune cell recruitment ও angiogenesis-এ ভূমিকা রাখে। BMP7, CDH3, CLDN1, INHBA, CXCL1/3/5, GABBR1, TRIP13 — এরা Top-10 KG হিসেবে চিহ্নিত হয়েছে, যাদের মধ্যে অনেকগুলোই chemokine family (CXCL1, 3, 5, 8) — অর্থাৎ colorectal cancer-এ **inflammation-driven signaling** একটি কেন্দ্রীয় প্যাটার্ন।
+
+---
+
+## (e) TF-KG Network
+**কেন:** KG-গুলোর expression কে নিয়ন্ত্রণ করছে (upstream regulator) তা বুঝতে transcription factor (TF) network তৈরি করা হয় — এটি regulatory hierarchy বোঝায়।
+
+**কী পাচ্ছি:** RELA ও NFKB1 টপ TF হিসেবে এসেছে — এরা **NF-κB pathway**-এর মূল উপাদান। যেহেতু CXCL8, CXCL1 ইত্যাদি NF-κB-এর classic target gene, তাই এই ফলাফল consistent — অর্থাৎ NF-κB signaling colorectal cancer-এর inflammatory KG expression নিয়ন্ত্রণ করছে।
+
+---
+
+## (f) miRNA-KG Network
+**কেন:** post-transcriptional regulation (miRNA দ্বারা mRNA silencing) বুঝতে এই network।
+
+**কী পাচ্ছি:** hsa-miR-335-5p, hsa-miR-4284, hsa-miR-124-3p, hsa-miR-1-3p ইত্যাদি key miRNA হিসেবে এসেছে, যারা মূলত CXCL5, INHBA, TRIB3-এর মতো KG-কে regulate করে বলে চিহ্নিত — এগুলো literature-এও অনেক ক্ষেত্রে tumor suppressor miRNA হিসেবে পরিচিত (বিশেষত miR-124)।
+
+---
+
+## (g) Disease-KG Comorbidity Network
+**কেন:** এই জিনগুলো colorectal cancer ছাড়াও আর কোন disease-এর সাথে যুক্ত (comorbidity risk) তা বুঝতে DisGeNET database ব্যবহার করা হয়।
+
+**কী পাচ্ছি:** Ulcerative Colitis, Chronic Airflow Obstruction, Endometriosis ইত্যাদি এসেছে — Ulcerative Colitis বিশেষভাবে গুরুত্বপূর্ণ কারণ chronic inflammatory bowel disease দীর্ঘমেয়াদে colorectal cancer risk বাড়ায় — এটি biological ভাবে খুবই consistent finding।
+
+---
+
+## (h) Survival Analysis (KM plot)
+**কেন:** KG expression level রোগীর overall survival-এর সাথে সম্পর্কিত কিনা যাচাই করা, যাতে বোঝা যায় কোন জিন **prognostic biomarker** হতে পারে।
+
+**কী পাচ্ছি (গুরুত্বপূর্ণ):**
+- **CXCL8**: Logrank p=0.032 (significant!), HR=0.62 — High CXCL8 group-এর survival ভালো (counter-intuitive কারণ এটি inflammatory gene, কিন্তু ডেটাতে এমনটাই দেখাচ্ছে)।
+- বাকি জিনগুলো (BMP7, CXCL5, GABBR1, TRIB3, CDH3, CLDN1, INHBA) প্রায় সবগুলোরই p>0.05 — অর্থাৎ statistically significant prognostic value নেই এই cohort-এ।
+- CXCL1-এর p=0.06, borderline significant।
+
+**সারমর্ম:** এই ১০টি KG-এর মধ্যে **শুধু CXCL8-ই** সত্যিকারের prognostic marker হিসেবে দাঁড়াচ্ছে statistical significance অনুযায়ী।
+
+---
+
+## (i) Drug Repurposing (DSigDB, DGIdb)
+**কেন:** এই KG-গুলোকে target করে এমন ঔষধ চিহ্নিত করা, যাতে potential therapeutic candidate পাওয়া যায় (drug repurposing approach)।
+
+**কী পাচ্ছি:** Cyclophosphamide, Dacarbazine (established chemotherapy drug), সাথে Naproxen (NSAID, anti-inflammatory) — এটি আবার NF-κB/inflammation pathway-এর সাথে সামঞ্জস্যপূর্ণ, কারণ NSAID inflammatory signaling কমায়।
+
+---
+
+## (j) GO & KEGG Enrichment
+**কেন:** DEG-গুলো কোন biological process, molecular function, cellular location এবং pathway-এ concentrated তা বুঝতে।
+
+**কী পাচ্ছি:**
+- **BP:** Immune response, inflammatory response — dominant theme immune/inflammation।
+- **MF:** Cytokine activity, chemokine activity, chemokine receptor binding — সরাসরি CXCL family-কে support করছে।
+- **CC:** GPCR dimeric complex, cell-cell junction — junction-related জিন (CLDN1, CDH3) সাথে সামঞ্জস্যপূর্ণ।
+- **KEGG:** Cytokine-cytokine receptor interaction, Chemokine signaling pathway, IL-17 signaling — সব পথই inflammation/immune signaling কেন্দ্রিক।
+
+---
+
+## সামগ্রিক Interpretation (এক নজরে)
+
+GSE113513 dataset-এর পুরো bioinformatics pipeline একটি সুসংগত গল্প বলছে:
+
+> Colorectal carcinoma-তে **CXCL8-কেন্দ্রিক chemokine/NF-κB inflammatory network** প্রধান ভূমিকা রাখছে। RELA/NFKB1 এই network-কে transcriptionally নিয়ন্ত্রণ করে, নির্দিষ্ট miRNA (miR-124, miR-335) post-transcriptionally দমন করার চেষ্টা করে, এবং এই pathway Ulcerative Colitis-এর মতো inflammatory comorbidity-র সাথে যুক্ত। এই ১০টি key gene-এর মধ্যে শুধুমাত্র **CXCL8**-এর survival-এর উপর পরিসংখ্যানগতভাবে তাৎপর্যপূর্ণ প্রভাব পাওয়া গেছে, যা একে সবচেয়ে শক্তিশালী candidate biomarker/drug target বানায়।
+
+কোনো নির্দিষ্ট sub-part (যেমন শুধু (d) বা (h)) নিয়ে আরও গভীরে যেতে চাইলে বলো।
